@@ -1,3 +1,10 @@
+prompt ==========================================
+prompt ORDS - GET de palpites por usuario
+prompt Exemplo:
+prompt /ords/admin/bol%C3%A3odosasah/get_palpites_usuario?id_usuario=3
+prompt /ords/admin/bol%C3%A3odosasah/get_palpites_usuario
+prompt ==========================================
+
 begin
   ords.define_module(
     p_module_name    => 'bolaodosasah',
@@ -20,14 +27,20 @@ begin
       select
         p.id_palpite,
         p.id_usuario,
+        u.nome,
+        u.usuario,
         p.id_jogo,
+        p.grupo_jogo,
         p.gols_casa,
         p.gols_fora,
         p.data_palpite,
         p.time_casa,
         p.time_fora
       from admin.palpites_bolao p
-      where p.id_usuario = :id_usuario
+      join admin.usuarios_bolao u
+        on u.id_usuario = p.id_usuario
+      where :id_usuario is null
+         or p.id_usuario = :id_usuario
       order by p.data_palpite desc, p.id_jogo
     ]'
   );
@@ -36,4 +49,5 @@ begin
 end;
 /
 
-prompt Handler GET criado em /ords/admin/bolãodosasah/get_palpites_usuario?id_usuario=3
+prompt Handler GET criado em /ords/admin/bol%C3%A3odosasah/get_palpites_usuario?id_usuario=3
+prompt Sem id_usuario, o endpoint retorna os palpites de todos os usuarios para o ranking

@@ -32,12 +32,14 @@ const SPECIAL_FLAG_CODES = {
 };
 
 let predictions = {};
+let rankingPredictions = {};
 let games = JSON.parse(localStorage.getItem(LS.games) || '[]');
 let groups = JSON.parse(localStorage.getItem(LS.groups) || '[]');
 let teams = JSON.parse(localStorage.getItem(LS.teams) || '[]');
 let currentUser = JSON.parse(sessionStorage.getItem(SS.session) || 'null');
 let teamsById = {};
 let loadingPredictions = false;
+let loadingRanking = false;
 
 const $ = id => document.getElementById(id);
 const page = document.body.dataset.page || '';
@@ -384,6 +386,20 @@ function gameDate(game) {
   return game.local_date || game.date || game.match_date || game.datetime || game.time || 'Data a definir';
 }
 
+function parseGameDate(game) {
+  const rawDate = game.local_date || game.date || game.match_date || game.datetime || game.time || '';
+  if (!rawDate) return null;
+
+  const parsed = new Date(rawDate);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
+  const normalized = String(rawDate).replace(' ', 'T');
+  const fallback = new Date(normalized);
+  if (!Number.isNaN(fallback.getTime())) return fallback;
+
+  return null;
+}
+
 function isGameFinished(game) {
   const finished = String(game.finished || '').toUpperCase();
   const status = String(game.status || game.match_status || game.state || '').toLowerCase();
@@ -401,6 +417,19 @@ function gameStatus(game) {
   const elapsed = String(game.time_elapsed || '').toLowerCase();
   if (['live', 'inprogress', 'in_progress'].includes(elapsed)) return 'Ao vivo';
   return 'Aguardando';
+}
+
+function isGameLocked(game) {
+  if (isGameFinished(game)) return true;
+
+  const elapsed = String(game.time_elapsed || '').toLowerCase();
+  const status = String(game.status || game.match_status || game.state || '').toLowerCase();
+  if (['live', 'inprogress', 'in_progress'].includes(elapsed)) return true;
+  if (['live', 'inprogress', 'in_progress', 'ongoing'].includes(status)) return true;
+
+  const matchDate = parseGameDate(game);
+  if (!matchDate) return false;
+  return Date.now() >= matchDate.getTime();
 }
 
 function score(game, side) {
@@ -448,7 +477,8 @@ async function savePredictionToApi(game, gameIdValue, pred) {
   const awayTeam = teamName(game, 'away');
   const payload = {
     id_usuario: Number(currentUser.id),
-    id_jogo: gameIdValue,
+    id_jogo: String(gameIdValue),
+    grupo_jogo: gameGroup(game),
     time_casa: homeTeam,
     time_fora: awayTeam,
     gols_casa: Number(pred.home),
@@ -467,39 +497,104 @@ function normalizePredictionRows(response) {
   return [];
 }
 
-function replacePredictionsForCurrentUser(items) {
-  if (!currentUser?.id) return;
+function normalizePredictionOwner(row, fallbackUser = null) {
+  const rawId = row?.ID_USUARIO ?? row?.id_usuario ?? fallbackUser?.id ?? '';
+  if (rawId === '' || rawId === null || rawId === undefined) return null;
 
-  const currentUserId = String(currentUser.id);
+  const rawLogin = row?.USUARIO ?? row?.usuario ?? row?.LOGIN ?? row?.login ?? fallbackUser?.login ?? '';
+  return {
+    id: String(rawId),
+    name: row?.NOME ?? row?.nome ?? row?.NAME ?? row?.name ?? fallbackUser?.name ?? `Participante ${rawId}`,
+    login: String(rawLogin || fallbackUser?.login || `usuario${rawId}`).toLowerCase()
+  };
+}
+
+function buildPredictionsByGame(items, fallbackUser = null) {
   const nextPredictions = {};
 
   items.forEach(row => {
     const idJogo = String(row?.ID_JOGO ?? row?.id_jogo ?? '');
-    if (!idJogo) return;
+    const user = normalizePredictionOwner(row, fallbackUser);
+    if (!idJogo || !user?.id) return;
 
     const golsCasa = row?.GOLS_CASA ?? row?.gols_casa ?? '';
     const golsFora = row?.GOLS_FORA ?? row?.gols_fora ?? '';
     const timeCasa = row?.TIME_CASA ?? row?.time_casa ?? '';
     const timeFora = row?.TIME_FORA ?? row?.time_fora ?? '';
 
-    nextPredictions[idJogo] = {
-      [currentUserId]: {
-        home: golsCasa === '' || golsCasa === null ? '' : Number(golsCasa),
-        away: golsFora === '' || golsFora === null ? '' : Number(golsFora),
-        user: {
-          id: currentUser.id,
-          name: currentUser.name,
-          login: currentUser.login
-        },
-        teams: {
-          home: timeCasa,
-          away: timeFora
-        }
+    nextPredictions[idJogo] ||= {};
+    nextPredictions[idJogo][user.id] = {
+      home: golsCasa === '' || golsCasa === null ? '' : Number(golsCasa),
+      away: golsFora === '' || golsFora === null ? '' : Number(golsFora),
+      user,
+      teams: {
+        home: timeCasa,
+        away: timeFora
       }
     };
   });
 
-  predictions = nextPredictions;
+  return nextPredictions;
+}
+
+function findGameIdByTeams(homeName, awayName) {
+  const targetHome = normalizeTeamKey(homeName);
+  const targetAway = normalizeTeamKey(awayName);
+  if (!targetHome || !targetAway) return '';
+
+  const game = games.find((item, idx) => {
+    const gameHome = normalizeTeamKey(teamName(item, 'home'));
+    const gameAway = normalizeTeamKey(teamName(item, 'away'));
+    return gameHome === targetHome && gameAway === targetAway;
+  });
+
+  return game ? String(gameId(game, games.indexOf(game))) : '';
+}
+
+function remapPredictionsToCurrentGames(sourcePredictions) {
+  const remapped = {};
+
+  Object.entries(sourcePredictions || {}).forEach(([rawGameId, byUser]) => {
+    const records = Object.values(byUser || {});
+    const sample = records[0];
+    const matchedGameId = findGameIdByTeams(sample?.teams?.home, sample?.teams?.away);
+    const finalGameId = matchedGameId || String(rawGameId);
+
+    remapped[finalGameId] ||= {};
+    Object.assign(remapped[finalGameId], byUser);
+  });
+
+  return remapped;
+}
+
+function syncCurrentUserIntoRankingPredictions() {
+  if (!currentUser?.id) return;
+
+  Object.entries(predictions).forEach(([gameIdValue, byUser]) => {
+    const mine = byUser?.[currentUser.id];
+    if (!mine) return;
+
+    rankingPredictions[gameIdValue] ||= {};
+    rankingPredictions[gameIdValue][currentUser.id] = {
+      ...mine,
+      user: {
+        id: String(currentUser.id),
+        name: currentUser.name,
+        login: currentUser.login
+      }
+    };
+  });
+}
+
+function replacePredictionsForCurrentUser(items) {
+  if (!currentUser?.id) return;
+  predictions = remapPredictionsToCurrentGames(buildPredictionsByGame(items, currentUser));
+  syncCurrentUserIntoRankingPredictions();
+}
+
+function replaceRankingPredictions(items) {
+  rankingPredictions = buildPredictionsByGame(items);
+  syncCurrentUserIntoRankingPredictions();
 }
 
 async function loadPredictionsFromApi() {
@@ -519,9 +614,24 @@ async function loadPredictionsFromApi() {
   }
 }
 
+async function loadRankingPredictionsFromApi() {
+  loadingRanking = true;
+  try {
+    const response = await getJsonWithParams(ORACLE_GET_PALPITES_API);
+    replaceRankingPredictions(normalizePredictionRows(response));
+  } finally {
+    loadingRanking = false;
+  }
+}
+
 async function syncPredictionsAfterAuth(messageElementId = '') {
   try {
     await loadPredictionsFromApi();
+    try {
+      await loadRankingPredictionsFromApi();
+    } catch (error) {
+      console.warn('Ranking ainda nao respondeu apos autenticar.', error);
+    }
   } catch (error) {
     console.warn('Nao foi possivel carregar os palpites do usuario apos autenticar.', error);
     const messageEl = messageElementId ? $(messageElementId) : null;
@@ -534,11 +644,12 @@ async function syncPredictionsAfterAuth(messageElementId = '') {
 function buildPredictionRoster() {
   const roster = new Map();
 
-  Object.values(predictions).forEach(byUser => {
+  Object.values(rankingPredictions).forEach(byUser => {
     Object.entries(byUser || {}).forEach(([userId, record]) => {
       if (record?.user?.login) {
-        roster.set(userId, {
-          id: userId,
+        const normalizedUserId = String(userId);
+        roster.set(normalizedUserId, {
+          id: normalizedUserId,
           name: record.user.name,
           login: record.user.login
         });
@@ -546,7 +657,7 @@ function buildPredictionRoster() {
     });
   });
 
-  if (currentUser?.id) roster.set(currentUser.id, currentUser);
+  if (currentUser?.id) roster.set(String(currentUser.id), { ...currentUser, id: String(currentUser.id) });
   return [...roster.values()];
 }
 
@@ -560,7 +671,7 @@ function getRows() {
 
       games.forEach((game, idx) => {
         const id = gameId(game, idx);
-        const p = predictions[id]?.[user.id];
+        const p = rankingPredictions[id]?.[user.id];
         if (p && p.home !== '' && p.away !== '') {
           palpites++;
           pontos += calcPoints(p, game);
@@ -589,8 +700,9 @@ function renderSessionPanel() {
   }
 
   const rows = getRows();
-  const row = rows.find(item => item.user.id === currentUser.id) || { pontos: 0, palpites: 0 };
-  const rank = rows.findIndex(item => item.user.id === currentUser.id) + 1;
+  const currentUserId = String(currentUser.id);
+  const row = rows.find(item => String(item.user.id) === currentUserId) || { pontos: 0, palpites: 0 };
+  const rank = rows.findIndex(item => String(item.user.id) === currentUserId) + 1;
 
   panelStatus.innerHTML = `
     <div class="session-grid">
@@ -718,22 +830,29 @@ function renderMatches() {
       const homeTeam = game.home_team_id ? getTeamMetaById(game.home_team_id) : getTeamMetaByName(teamName(game, 'home'));
       const awayTeam = game.away_team_id ? getTeamMetaById(game.away_team_id) : getTeamMetaByName(teamName(game, 'away'));
       const pts = calcPoints(pred, game);
+      const locked = isGameLocked(game);
+      const lockMessage = isGameFinished(game)
+        ? 'Palpite encerrado: o jogo ja terminou.'
+        : locked
+          ? 'Palpite bloqueado: o jogo ja comecou ou esta acontecendo.'
+          : '';
 
-      return `<div class="match">
+      return `<div class="match ${locked ? 'match-locked' : ''}">
         <div class="match-top"><span>${gameGroup(game) ? `Grupo ${gameGroup(game)}` : 'Fase'}</span><span>${gameDate(game)} • ${gameStatus(game)}</span></div>
         <div class="teams">${teamBadge(homeTeam.name, homeTeam.flag, 'home')}<span>x</span>${teamBadge(awayTeam.name, awayTeam.flag, 'away')}</div>
         <div class="real-score">${placar}</div>
         <div class="solo-prediction">
           <label>${userLabel(currentUser)} <span>@${currentUser.login}</span></label>
           <div class="prediction-row">
-            <input type="number" min="0" value="${pred.home}" onchange="setPredictionValue('${id}', 'home', this.value)">
+            <input type="number" min="0" value="${pred.home}" onchange="setPredictionValue('${id}', 'home', this.value)" ${locked ? 'disabled' : ''}>
             <span>x</span>
-            <input type="number" min="0" value="${pred.away}" onchange="setPredictionValue('${id}', 'away', this.value)">
+            <input type="number" min="0" value="${pred.away}" onchange="setPredictionValue('${id}', 'away', this.value)" ${locked ? 'disabled' : ''}>
             <span class="points">${pts} pts</span>
           </div>
           <div class="prediction-actions">
-            <button type="button" class="save-prediction-btn" onclick="savePrediction('${id}')">Salvar palpite</button>
+            <button type="button" class="save-prediction-btn" onclick="savePrediction('${id}')" ${locked ? 'disabled' : ''}>Salvar palpite</button>
           </div>
+          ${lockMessage ? `<p class="muted">${lockMessage}</p>` : ''}
         </div>
       </div>`;
     }).join('') || '<p class="muted">Nenhum jogo encontrado.</p>';
@@ -755,6 +874,7 @@ window.setPredictionValue = (gameIdValue, side, value) => {
     }
   };
   predictions[gameIdValue][currentUser.id][side] = value;
+  syncCurrentUserIntoRankingPredictions();
   renderRanking();
   renderMatches();
   renderSessionPanel();
@@ -762,10 +882,22 @@ window.setPredictionValue = (gameIdValue, side, value) => {
 
 window.savePrediction = async gameIdValue => {
   if (!currentUser?.id) return;
-  const game = games.find((item, idx) => gameId(item, idx) === gameIdValue);
+  const targetGameId = String(gameIdValue);
+  const game = games.find((item, idx) => String(gameId(item, idx)) === targetGameId);
   if (!game) return;
-  const pred = predictions[gameIdValue][currentUser.id];
+  const pred = predictions[targetGameId]?.[currentUser.id];
   const messageEl = $('mensagemPalpite');
+
+  if (isGameLocked(game)) {
+    if (messageEl) messageEl.textContent = 'Esse jogo ja comecou ou terminou. Nao e mais possivel salvar palpite.';
+    showToast('Palpite bloqueado: o jogo ja comecou ou terminou.', 'warning');
+    return;
+  }
+
+  if (!pred) {
+    if (messageEl) messageEl.textContent = 'Nao encontrei o palpite desse jogo para salvar.';
+    return;
+  }
 
   if (pred.home === '' || pred.away === '') {
     if (messageEl) messageEl.textContent = 'Preencha os dois lados do placar para salvar no banco.';
@@ -773,11 +905,22 @@ window.savePrediction = async gameIdValue => {
   }
 
   try {
-    await savePredictionToApi(game, gameIdValue, pred);
+    const response = await savePredictionToApi(game, targetGameId, pred);
+    if (response?.success === false) {
+      throw new Error(response?.error || response?.message || 'A API nao confirmou o salvamento do palpite.');
+    }
+
     await loadPredictionsFromApi();
+    try {
+      await loadRankingPredictionsFromApi();
+    } catch (error) {
+      console.warn('Ranking ainda nao respondeu depois de salvar o palpite.', error);
+    }
     renderAll();
-    if (messageEl) messageEl.textContent = `Palpite salvo no banco para ${teamName(game, 'home')} x ${teamName(game, 'away')}.`;
+    const successMessage = `Palpite registrado com sucesso para ${teamName(game, 'home')} x ${teamName(game, 'away')}.`;
+    if (messageEl) messageEl.textContent = successMessage;
     showToast(`Palpite salvo: ${teamName(game, 'home')} ${pred.home} x ${pred.away} ${teamName(game, 'away')}.`);
+    window.alert(successMessage);
   } catch (error) {
     if (isDuplicatePredictionError(error)) {
       if (messageEl) messageEl.textContent = 'Esse palpite ja foi lancado para este jogo.';
@@ -796,6 +939,11 @@ function renderRanking() {
   if ($('totalPalpites')) $('totalPalpites').textContent = String(rows.reduce((sum, row) => sum + row.palpites, 0));
 
   if ($('rankingLista')) {
+    if (loadingRanking && !rows.length) {
+      $('rankingLista').innerHTML = '<div class="podium-empty">Carregando ranking oficial...</div>';
+      return;
+    }
+
     $('rankingLista').innerHTML =
       rows.map((row, i) => `
         <article class="leaderboard-row ${i < 3 ? 'highlight' : ''}">
@@ -931,12 +1079,19 @@ if ($('filtroGrupo')) $('filtroGrupo').addEventListener('change', renderMatches)
 clearLegacyUserCache();
 rebuildTeamIndex();
 loadData().then(async () => {
-  if (!currentUser?.id) return;
+  if (currentUser?.id) {
+    try {
+      await loadPredictionsFromApi();
+    } catch (error) {
+      console.warn('Nao foi possivel carregar os palpites do usuario logado.', error);
+    }
+  }
 
   try {
-    await loadPredictionsFromApi();
-    renderAll();
+    await loadRankingPredictionsFromApi();
   } catch (error) {
-    console.warn('Nao foi possivel carregar palpites salvos do usuario.', error);
+    console.warn('Nao foi possivel carregar o ranking da API.', error);
   }
+
+  renderAll();
 });
