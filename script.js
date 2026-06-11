@@ -31,6 +31,25 @@ const SPECIAL_FLAG_CODES = {
   iran: 'ir'
 };
 
+const STADIUM_TIMEZONES = {
+  '1': 'America/Mexico_City',
+  '2': 'America/Mexico_City',
+  '3': 'America/Monterrey',
+  '4': 'America/Chicago',
+  '5': 'America/Chicago',
+  '6': 'America/Chicago',
+  '7': 'America/New_York',
+  '8': 'America/New_York',
+  '9': 'America/New_York',
+  '10': 'America/New_York',
+  '11': 'America/New_York',
+  '12': 'America/Toronto',
+  '13': 'America/Vancouver',
+  '14': 'America/Los_Angeles',
+  '15': 'America/Los_Angeles',
+  '16': 'America/Los_Angeles'
+};
+
 let predictions = {};
 let rankingPredictions = {};
 let games = JSON.parse(localStorage.getItem(LS.games) || '[]');
@@ -416,8 +435,68 @@ function gameId(game, idx) {
   return game.id || game._id || game.match_id || game.game_id || `jogo-${idx}`;
 }
 
+function timeZoneOffsetMs(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  const asUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second)
+  );
+
+  return asUtc - date.getTime();
+}
+
+function buildDateFromVenueTime(year, month, day, hour, minute, timeZone) {
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const offset = timeZoneOffsetMs(utcGuess, timeZone);
+  return new Date(utcGuess.getTime() - offset);
+}
+
+function parseGameDate(value, game) {
+  if (!value) return null;
+  const raw = String(value).trim();
+
+  const slashMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/);
+  if (slashMatch) {
+    const [, month, day, year, hour, minute] = slashMatch;
+    const sourceTimeZone = STADIUM_TIMEZONES[String(game?.stadium_id || '')] || 'UTC';
+    return buildDateFromVenueTime(Number(year), Number(month), Number(day), Number(hour), Number(minute), sourceTimeZone);
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function gameDate(game) {
-  return game.local_date || game.date || game.match_date || game.datetime || game.time || 'Data a definir';
+  const rawDate = game.local_date || game.date || game.match_date || game.datetime || game.time;
+  const parsed = parseGameDate(rawDate, game);
+  if (!parsed) return rawDate || 'Data a definir';
+
+  const formatted = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(parsed);
+
+  return `${formatted} (Brasilia)`;
 }
 
 function isGameFinished(game) {
@@ -442,6 +521,7 @@ function gameStatus(game) {
 
 function isGameLocked(game) {
   if (isGameFinished(game)) return true;
+  if (hasVisibleMatchScore(game) || hasScorerInfo(game)) return true;
 
   const elapsed = String(game.time_elapsed || '').toLowerCase();
   const status = String(game.status || game.match_status || game.state || '').toLowerCase();
@@ -920,9 +1000,9 @@ function renderMatches() {
             <input type="number" min="0" value="${pred.away}" onchange="setPredictionValue('${id}', 'away', this.value)" ${locked ? 'disabled' : ''}>
             <span class="points">${pts} pts</span>
           </div>
-          <div class="prediction-actions">
-            <button type="button" class="save-prediction-btn" onclick="savePrediction('${id}')" ${locked ? 'disabled' : ''}>Salvar palpite</button>
-          </div>
+          ${locked ? '' : `<div class="prediction-actions">
+            <button type="button" class="save-prediction-btn" onclick="savePrediction('${id}')">Salvar palpite</button>
+          </div>`}
           ${lockMessage ? `<p class="muted">${lockMessage}</p>` : ''}
         </div>
       </div>`;
