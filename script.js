@@ -227,7 +227,6 @@ async function loadData(force = false) {
   if (!force && games.length && groups.length && teams.length) {
     rebuildTeamIndex();
     renderAll();
-    return;
   }
 
   try {
@@ -437,6 +436,7 @@ function gameStatus(game) {
   if (isGameFinished(game)) return 'Encerrado';
   const elapsed = String(game.time_elapsed || '').toLowerCase();
   if (['live', 'inprogress', 'in_progress'].includes(elapsed)) return 'Ao vivo';
+  if (hasScorerInfo(game)) return 'Ao vivo';
   return 'Aguardando';
 }
 
@@ -464,6 +464,53 @@ function score(game, side) {
   }
 
   return null;
+}
+
+function hasScorerInfo(game) {
+  return Boolean(gameScorers(game, 'home') || gameScorers(game, 'away'));
+}
+
+function hasVisibleMatchScore(game) {
+  const hg = score(game, 'home');
+  const ag = score(game, 'away');
+  return (isGameFinished(game) || hasScorerInfo(game) || gameStatus(game) === 'Ao vivo') && !Number.isNaN(hg) && !Number.isNaN(ag) && hg !== null && ag !== null;
+}
+
+function normalizeScorersText(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw.toLowerCase() === 'null') return '';
+
+  return raw
+    .replace(/^\{+|\}+$/g, '')
+    .replace(/[“”"]/g, '')
+    .replace(/\s*;\s*/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function gameScorers(game, side) {
+  const keys = side === 'home'
+    ? ['home_scorers', 'homeScorers', 'team1_scorers', 'home_scorer']
+    : ['away_scorers', 'awayScorers', 'team2_scorers', 'away_scorer'];
+
+  for (const key of keys) {
+    const cleaned = normalizeScorersText(game[key]);
+    if (cleaned) return cleaned;
+  }
+
+  return '';
+}
+
+function renderGameScorers(game) {
+  const home = gameScorers(game, 'home');
+  const away = gameScorers(game, 'away');
+
+  if (!hasVisibleMatchScore(game) || (!home && !away)) return '';
+
+  return `<div class="goal-scorers">
+    ${home ? `<p><strong>${teamName(game, 'home')}:</strong> ${home}</p>` : ''}
+    ${away ? `<p><strong>${teamName(game, 'away')}:</strong> ${away}</p>` : ''}
+  </div>`;
 }
 
 function calcPoints(pred, game) {
@@ -844,7 +891,12 @@ function renderMatches() {
 
       const hg = score(game, 'home');
       const ag = score(game, 'away');
-      const placar = isGameFinished(game) ? `Resultado final: ${hg} x ${ag}` : 'Resultado ainda nao validado';
+      const scoreInline = hasVisibleMatchScore(game) ? `${hg} x ${ag}` : 'x';
+      const placar = isGameFinished(game)
+        ? `Resultado final: ${hg} x ${ag}`
+        : hasVisibleMatchScore(game)
+          ? `Placar atual: ${hg} x ${ag}`
+          : 'Resultado ainda nao validado';
       const homeTeam = game.home_team_id ? getTeamMetaById(game.home_team_id) : getTeamMetaByName(teamName(game, 'home'));
       const awayTeam = game.away_team_id ? getTeamMetaById(game.away_team_id) : getTeamMetaByName(teamName(game, 'away'));
       const pts = calcPoints(pred, game);
@@ -857,7 +909,8 @@ function renderMatches() {
 
       return `<div class="match ${locked ? 'match-locked' : ''}">
         <div class="match-top"><span>${gameGroup(game) ? `Grupo ${gameGroup(game)}` : 'Fase'}</span><span>${gameDate(game)} • ${gameStatus(game)}</span></div>
-        <div class="teams">${teamBadge(homeTeam.name, homeTeam.flag, 'home')}<span>x</span>${teamBadge(awayTeam.name, awayTeam.flag, 'away')}</div>
+        <div class="teams">${teamBadge(homeTeam.name, homeTeam.flag, 'home')}<span class="match-score-inline">${scoreInline}</span>${teamBadge(awayTeam.name, awayTeam.flag, 'away')}</div>
+        ${renderGameScorers(game)}
         <div class="real-score">${placar}</div>
         <div class="solo-prediction">
           <label>${userLabel(currentUser)} <span>@${currentUser.login}</span></label>

@@ -521,8 +521,10 @@ button:hover,
   font-weight:800;
 }
 
-.teams span:nth-child(2){
+.match-score-inline{
   color:var(--accent);
+  min-width:56px;
+  text-align:center;
 }
 
 .teams .team-badge.home{
@@ -537,6 +539,23 @@ button:hover,
 .real-score{
   color:var(--muted);
   font-size:.9rem;
+}
+
+.goal-scorers{
+  margin-top:-2px;
+  margin-bottom:10px;
+  display:grid;
+  gap:4px;
+  color:var(--muted);
+  font-size:.9rem;
+}
+
+.goal-scorers p{
+  margin:0;
+}
+
+.goal-scorers strong{
+  color:var(--text);
 }
 
 .solo-prediction{
