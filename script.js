@@ -44,6 +44,7 @@ let loadingRanking = false;
 const $ = id => document.getElementById(id);
 const page = document.body.dataset.page || '';
 let toastContainer = null;
+let successPopup = null;
 
 function slugify(value) {
   return String(value || '')
@@ -91,6 +92,40 @@ function showToast(message, type = 'success') {
     toast.classList.remove('show');
     window.setTimeout(() => toast.remove(), 220);
   }, 3200);
+}
+
+function ensureSuccessPopup() {
+  if (successPopup) return successPopup;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'site-popup-overlay';
+  overlay.innerHTML = `
+    <div class="site-popup" role="dialog" aria-modal="true" aria-labelledby="sitePopupTitle">
+      <span class="site-popup-badge">Sucesso</span>
+      <h3 id="sitePopupTitle">Palpite registrado</h3>
+      <p id="sitePopupMessage"></p>
+      <button type="button" class="site-popup-button">Fechar</button>
+    </div>
+  `;
+
+  overlay.addEventListener('click', event => {
+    if (event.target === overlay) overlay.classList.remove('show');
+  });
+
+  overlay.querySelector('.site-popup-button').addEventListener('click', () => {
+    overlay.classList.remove('show');
+  });
+
+  document.body.appendChild(overlay);
+  successPopup = overlay;
+  return successPopup;
+}
+
+function showSuccessPopup(message) {
+  const popup = ensureSuccessPopup();
+  const messageEl = popup.querySelector('#sitePopupMessage');
+  if (messageEl) messageEl.textContent = message;
+  popup.classList.add('show');
 }
 
 function isDuplicatePredictionError(error) {
@@ -386,20 +421,6 @@ function gameDate(game) {
   return game.local_date || game.date || game.match_date || game.datetime || game.time || 'Data a definir';
 }
 
-function parseGameDate(game) {
-  const rawDate = game.local_date || game.date || game.match_date || game.datetime || game.time || '';
-  if (!rawDate) return null;
-
-  const parsed = new Date(rawDate);
-  if (!Number.isNaN(parsed.getTime())) return parsed;
-
-  const normalized = String(rawDate).replace(' ', 'T');
-  const fallback = new Date(normalized);
-  if (!Number.isNaN(fallback.getTime())) return fallback;
-
-  return null;
-}
-
 function isGameFinished(game) {
   const finished = String(game.finished || '').toUpperCase();
   const status = String(game.status || game.match_status || game.state || '').toLowerCase();
@@ -426,10 +447,7 @@ function isGameLocked(game) {
   const status = String(game.status || game.match_status || game.state || '').toLowerCase();
   if (['live', 'inprogress', 'in_progress'].includes(elapsed)) return true;
   if (['live', 'inprogress', 'in_progress', 'ongoing'].includes(status)) return true;
-
-  const matchDate = parseGameDate(game);
-  if (!matchDate) return false;
-  return Date.now() >= matchDate.getTime();
+  return false;
 }
 
 function score(game, side) {
@@ -920,7 +938,7 @@ window.savePrediction = async gameIdValue => {
     const successMessage = `Palpite registrado com sucesso para ${teamName(game, 'home')} x ${teamName(game, 'away')}.`;
     if (messageEl) messageEl.textContent = successMessage;
     showToast(`Palpite salvo: ${teamName(game, 'home')} ${pred.home} x ${pred.away} ${teamName(game, 'away')}.`);
-    window.alert(successMessage);
+    showSuccessPopup(successMessage);
   } catch (error) {
     if (isDuplicatePredictionError(error)) {
       if (messageEl) messageEl.textContent = 'Esse palpite ja foi lancado para este jogo.';
