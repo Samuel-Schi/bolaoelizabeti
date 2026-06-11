@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jogos | Bolao Elizabeti</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="palpites">
+  <nav class="site-nav">
+    <a class="brand" href="index.html">Bolao Elizabeti</a>
+    <div class="nav-actions">
+      <div class="nav-links">
+        <a class="nav-link active" href="index.html">Jogos</a>
+        <a class="nav-link" href="registro.html">Login / Registro</a>
+        <a class="nav-link" href="ranking.html">Ranking</a>
+      </div>
+      <button type="button" id="btnLogoutNav" class="nav-logout" hidden>Sair</button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-copy">
+      <p class="tag">Tela principal</p>
+      <h1>Jogos e palpites</h1>
+      <p>Abra o site direto na rodada, faça login quando precisar e salve os placares do seu usuario sem misturar com cadastro e ranking.</p>
+    </div>
+    <div class="hero-side">
+      <div class="score-card">
+        <strong id="totalJogos">0</strong>
+        <span>jogos carregados</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel top-summary">
+      <div>
+        <p class="tag">Status do sistema</p>
+        <h2>Base dos jogos da Copa</h2>
+        <p class="muted">Os jogos usam a API da Copa e, se ela falhar, o sistema cai automaticamente para o JSON oficial do GitHub.</p>
+      </div>
+      <div class="summary-cards">
+        <article class="mini-stat">
+          <strong id="totalMeusPalpites">0</strong>
+          <span>meus palpites</span>
+        </article>
+        <article class="mini-stat">
+          <strong id="sessionState">OFF</strong>
+          <span>sessao ativa</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel session-panel">
+      <div class="section-head">
+        <h2>Meu acesso</h2>
+        <a class="button-link secondary-link" href="registro.html">Abrir login</a>
+      </div>
+      <div id="statusSessao" class="session-card">
+        <p class="muted">Nenhum usuario logado.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Grupos da Copa</h2>
+        <button id="btnAtualizar">Atualizar jogos</button>
+      </div>
+      <div id="grupos" class="groups"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Palpites da rodada</h2>
+        <select id="filtroGrupo">
+          <option value="">Todos os grupos</option>
+        </select>
+      </div>
+      <p class="muted section-copy">Cada jogo tem seu proprio botao de salvar. O palpite sempre vai para o usuario logado.</p>
+      <p id="mensagemPalpite" class="muted auth-message"></p>
+      <div id="jogos" class="matches"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Bandeiras dos times</h2>
+      </div>
+      <div id="galeriaTimes" class="teams-gallery"></div>
+    </section>
+  </main>
+
+  <footer>
+    Jogos, login e ranking agora estao separados para deixar o fluxo do Bolao Elizabeti mais limpo.
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

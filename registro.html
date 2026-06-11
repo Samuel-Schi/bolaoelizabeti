@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acesso | Bolao Elizabeti</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="registro">
+  <nav class="site-nav">
+    <a class="brand" href="index.html">Bolao Elizabeti</a>
+    <div class="nav-actions">
+      <div class="nav-links">
+        <a class="nav-link" href="index.html">Jogos</a>
+        <a class="nav-link active" href="registro.html">Login / Registro</a>
+        <a class="nav-link" href="ranking.html">Ranking</a>
+      </div>
+      <button type="button" id="btnLogoutNav" class="nav-logout" hidden>Sair</button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-copy">
+      <p class="tag">Bolao Elizabeti</p>
+      <h1>Acesso separado e organizado</h1>
+      <p>Uma area so para autenticar ou criar usuario, sem misturar com os jogos e sem poluir a tela principal.</p>
+    </div>
+    <div class="hero-side">
+      <div class="score-card">
+        <strong id="sessionState">OFF</strong>
+        <span>status da sessao</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="access-grid">
+      <section class="panel access-card">
+        <div class="section-head">
+          <div>
+            <p class="panel-tag">Login</p>
+            <h2>Entrar no Bolao Elizabeti</h2>
+          </div>
+        </div>
+        <p class="muted access-copy">Essa parte apenas autentica. Se o usuario ou senha estiverem errados, o sistema bloqueia a entrada.</p>
+        <form id="formLogin" class="stack-form">
+          <input id="loginAcesso" type="text" placeholder="Usuario / login" required />
+          <input id="senhaAcesso" type="password" placeholder="Senha" required />
+          <button type="submit">Entrar</button>
+        </form>
+        <p id="mensagemLogin" class="muted auth-message"></p>
+      </section>
+
+      <section class="panel access-card">
+        <div class="section-head">
+          <div>
+            <p class="panel-tag">Cadastro</p>
+            <h2>Criar novo usuario</h2>
+          </div>
+        </div>
+        <p class="muted access-copy">Essa parte apenas registra nome, usuario e senha no banco para liberar o login depois.</p>
+        <form id="formParticipante" class="stack-form">
+          <input id="nomeParticipante" type="text" placeholder="Nome completo" required />
+          <input id="loginParticipante" type="text" placeholder="Usuario / login" required />
+          <input id="senhaParticipante" type="password" placeholder="Senha" required />
+          <button type="submit">Registrar usuario</button>
+        </form>
+        <p id="mensagemCadastro" class="muted auth-message"></p>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Sessao atual</h2>
+      </div>
+      <div id="statusSessao" class="session-card">
+        <p class="muted">Nenhum usuario logado.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    O usuario autenticado fica apenas na sessao atual do navegador.
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ranking | Bolao Elizabeti</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="ranking">
+  <nav class="site-nav">
+    <a class="brand" href="index.html">Bolao Elizabeti</a>
+    <div class="nav-actions">
+      <div class="nav-links">
+        <a class="nav-link" href="index.html">Jogos</a>
+        <a class="nav-link" href="registro.html">Login / Registro</a>
+        <a class="nav-link active" href="ranking.html">Ranking</a>
+      </div>
+      <button type="button" id="btnLogoutNav" class="nav-logout" hidden>Sair</button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-copy">
+      <p class="tag">Ranking oficial</p>
+      <h1>Classificacao do Bolao Elizabeti</h1>
+      <p>Acompanhe o top 3, veja a tabela completa e recalcule os pontos com base nos placares registrados.</p>
+    </div>
+    <div class="hero-side">
+      <div class="score-card">
+        <strong id="totalParticipantes">0</strong>
+        <span>participantes</span>
+      </div>
+      <div class="score-card">
+        <strong id="totalPalpites">0</strong>
+        <span>palpites feitos</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel podium-panel">
+      <div class="section-head">
+        <h2>Top 3 do ranking</h2>
+        <span class="muted">Os lideres do bolao</span>
+      </div>
+      <div id="podioRanking" class="podium"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Ranking completo</h2>
+        <button id="btnRecalcular">Recalcular pontos</button>
+      </div>
+      <div class="leaderboard-shell">
+        <div class="leaderboard-head">
+          <span>Posicao</span>
+          <span>Participante</span>
+          <span>Pontos</span>
+        </div>
+        <div id="rankingLista" class="leaderboard-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    O ranking usa os palpites salvos pelos usuarios autenticados no sistema.
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
